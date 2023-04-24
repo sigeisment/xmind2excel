@@ -6,12 +6,10 @@ import cn.xxx.xmind2excel.util.ExcelUtil;
 import cn.xxx.xmind2excel.util.FileExtension;
 import cn.xxx.xmind2excel.util.FileUtil;
 import com.google.gson.Gson;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.poi.ss.usermodel.*;
-import org.dom4j.Element;
-import org.dom4j.io.SAXReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.util.CollectionUtils;
 
 import java.io.*;
 import java.util.ArrayList;
@@ -70,11 +68,6 @@ public class XMind2Excel {
             e.printStackTrace();
             logger.error(e.getMessage());
         }
-
-        // 获取xMind content.xml文件
-        File xmlFile = new File(descDir + "/content.json");
-        // 创建一个SAXReader对象
-        SAXReader sax = new SAXReader();
 
         try (FileReader fileReader = new FileReader(descDir + "/content.json")){
             // 获取json
