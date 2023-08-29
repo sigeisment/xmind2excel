@@ -1,20 +1,21 @@
 package cn.xxx.xmind2excel.biz;
 
 
+import cn.xxx.xmind2excel.model.*;
 import cn.xxx.xmind2excel.util.ExcelUtil;
 import cn.xxx.xmind2excel.util.FileExtension;
 import cn.xxx.xmind2excel.util.FileUtil;
+import com.google.gson.Gson;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.poi.ss.usermodel.*;
-import org.dom4j.Document;
-import org.dom4j.DocumentException;
-import org.dom4j.Element;
-import org.dom4j.io.SAXReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * @author xiongchenghui
@@ -68,27 +69,19 @@ public class XMind2Excel {
             logger.error(e.getMessage());
         }
 
-        // 获取xMind content.xml文件
-        File xmlFile = new File(descDir + "/content.xml");
-        // 创建一个SAXReader对象
-        SAXReader sax = new SAXReader();
-
-        try{
-            // 获取document对象,如果文档无节点，则会抛出Exception提前结束
-            Document document = sax.read(xmlFile);
+        try (FileReader fileReader = new FileReader(descDir + "/content.json")){
+            // 获取json
+            Gson gson = new Gson();
             // 获取xMind根节点
-            Element root = document.getRootElement();
+            XmindRoot[] xmindRoot = gson.fromJson(fileReader, XmindRoot[].class);
             // 从根节点开始遍历解析所有节点, 生成测试用例list
             testCases.clear();
             logger.info("******************解析用例********************");
-            parseXMind(root);
+            parseXMind(xmindRoot);
             logger.info("=====================>用例解析完毕");
-        }catch (DocumentException de){
+        }catch (Exception de){
             de.printStackTrace();
             logger.error(de.getMessage());
-        }catch (FileNotFoundException nfe){
-            nfe.printStackTrace();
-            logger.error(nfe.getMessage());
         }
 
         //删除临时文件夹
@@ -116,11 +109,15 @@ public class XMind2Excel {
 
         // 创建一个样式
         setCellStyle(workbook);
+        Font font = workbook.createFont();
+        font.setBold(true);
+        cellStyle.setFont(font);
         // 获取解析用例的表格
         Sheet caseSheet = workbook.getSheetAt(0);
         // 创建表头
         setSheetColumnHeader(caseSheet, cellStyle);
 
+        setCellStyle(workbook);
         // 逐条写入用例 并统计测试步骤验证点数量
         int steps = 0;
         int checkPointers = 0;
@@ -195,6 +192,10 @@ public class XMind2Excel {
         testNameCell.setCellValue("用例名称");
         testNameCell.setCellStyle(cellStyle);
 
+        Cell demandId = testcaseTitle.createCell(TestCaseTemplate.DEMAND_ID);
+        demandId.setCellValue("需求ID");
+        demandId.setCellStyle(cellStyle);
+
         Cell predicationCell = testcaseTitle.createCell(TestCaseTemplate.PREDICATION);
         predicationCell.setCellValue("前置条件");
         predicationCell.setCellStyle(cellStyle);
@@ -207,13 +208,21 @@ public class XMind2Excel {
         expectCell.setCellValue("预期结果");
         expectCell.setCellStyle(cellStyle);
 
-        Cell testCaseTypeCell = testcaseTitle.createCell(TestCaseTemplate.TESTCASETYPE);
+        Cell testCaseTypeCell = testcaseTitle.createCell(TestCaseTemplate.TESTCASE_TYPE);
         testCaseTypeCell.setCellValue("用例类型");
         testCaseTypeCell.setCellStyle(cellStyle);
+
+        Cell testcaseStatus = testcaseTitle.createCell(TestCaseTemplate.TESTCASE_STATUS);
+        testcaseStatus.setCellValue("用例状态");
+        testcaseStatus.setCellStyle(cellStyle);
 
         Cell importanceCell = testcaseTitle.createCell(TestCaseTemplate.PRIORITY);
         importanceCell.setCellValue("用例等级");
         importanceCell.setCellStyle(cellStyle);
+
+        Cell createdBy = testcaseTitle.createCell(TestCaseTemplate.CREATED_BY);
+        createdBy.setCellValue("创建人");
+        createdBy.setCellStyle(cellStyle);
 
     }
 
@@ -227,6 +236,10 @@ public class XMind2Excel {
         Cell testCaseCatalogCell = testcaseRow.createCell(TestCaseTemplate.TESTCASECATALOG);
         testCaseCatalogCell.setCellStyle(cellStyle);
         testCaseCatalogCell.setCellValue(testCasePO.getTestCaseCatalog());
+
+        Cell demandIdCell = testcaseRow.createCell(TestCaseTemplate.DEMAND_ID);
+        demandIdCell.setCellStyle(cellStyle);
+        demandIdCell.setCellValue(testCasePO.getDemandId());
 
         Cell testCaseNameCell = testcaseRow.createCell(TestCaseTemplate.TESTCASENAME);
         testCaseNameCell.setCellStyle(cellStyle);
@@ -260,187 +273,76 @@ public class XMind2Excel {
         }
         resultsCell.setCellValue(sb.toString());
 
-        Cell testCaseTypeCell = testcaseRow.createCell(TestCaseTemplate.TESTCASETYPE);
+        Cell testCaseTypeCell = testcaseRow.createCell(TestCaseTemplate.TESTCASE_TYPE);
         testCaseTypeCell.setCellStyle(cellStyle);
         testCaseTypeCell.setCellValue(testCasePO.getTestCaseType());
+
+        Cell testCaseStatusCell = testcaseRow.createCell(TestCaseTemplate.TESTCASE_STATUS);
+        testCaseStatusCell.setCellStyle(cellStyle);
+        testCaseStatusCell.setCellValue(testCasePO.getTestCaseStatus());
 
         Cell priorityCell = testcaseRow.createCell(TestCaseTemplate.PRIORITY);
         priorityCell.setCellStyle(cellStyle);
         priorityCell.setCellValue(testCasePO.getPriority());
+
+        Cell createdByCell = testcaseRow.createCell(TestCaseTemplate.CREATED_BY);
+        createdByCell.setCellStyle(cellStyle);
+        createdByCell.setCellValue(testCasePO.getCreatedBy());
     }
 
     /***
      * &Desc: 解析XMind
-     * @param node 指定节点开始解析
+     * @param nodes 指定节点开始解析
      * @return void
      */
-    private static void parseXMind(Element node) throws FileNotFoundException {
-        // 解析节点
-        if (node != null) {
-            // 获取root topic信息
-            dealXMindRootInfo(node);
-
-            // 分支主题
-            if("topics".equals(node.getName()) && "attached".equals(node.attributeValue("type"))){
-                // 获取所有的topic分支节点
-                List<Element> topicList = node.elements("topic");
-                // 遍历所有的topic分支节点
-                for (Element el: topicList) {
-                    Element eMarker = el.element("marker-refs");
-                    // 如果是模块 或 用例节点
-                    if(eMarker != null){
-                        Element eMarkerRef = eMarker.element("marker-ref");
-                        String markerIcon = eMarkerRef.attributeValue("marker-id");
-                        // 用例
-                        if(markerIcon.startsWith("priority")){
-                            logger.info("###########当前node为用例:" + el.element("title").getStringValue());
-                            TestCasePO testCasePO = dealXMindTestCase(el, markerIcon);
-                            testCases.add(testCasePO);
-                        }
-                        // 模块
-                        if(markerIcon.startsWith("flag") || markerIcon.startsWith("star")){
-                            logger.info("###########当前node为模块:" + el.element("title").getStringValue());
-                        }
-                    }
+    private static void parseXMind(XmindRoot... nodes) throws FileNotFoundException {
+        if (nodes.length == 0) {
+            return;
+        }
+        for (XmindRoot node : nodes) {
+            RootTopic rootTopic = node.getRootTopic();
+            if (Objects.isNull(rootTopic)) {
+                continue;
+            }
+            RootTopicChildren children = rootTopic.getChildren();
+            if (Objects.isNull(children)) {
+                continue;
+            }
+            List<PurpleAttached> attached = children.getAttached();
+            if (CollectionUtils.isEmpty(attached)) {
+                continue;
+            }
+            for (PurpleAttached purpleAttached : attached) {
+                // 测试用例名称
+                String parentName = purpleAttached.getTitle();
+                String demandId = purpleAttached.getNotes().getPlain().getContent();
+                RootTopicChildren subTestCase = purpleAttached.getChildren();
+                List<PurpleAttached> subAttachedList = subTestCase.getAttached();
+                for (PurpleAttached subAttached : subAttachedList) {
+                    TestCasePO testCasePO = new TestCasePO();
+                    testCasePO.setTestCaseType("功能用例");
+                    testCasePO.setTestCaseStatus("正常");
+                    testCases.add(testCasePO);
+                    // 需求id
+                    testCasePO.setDemandId(demandId);
+                    // 测试用例子名称
+                    String subName = subAttached.getTitle();
+                    testCasePO.setTestCaseName(parentName+"-"+subName);
+                    // 前置条件
+                    String note = subAttached.getNotes().getPlain().getContent();
+                    testCasePO.setPredication(note);
+                    // 优先级
+                    String priority = subAttached.getMarkers().get(0).getMarkerId().replaceAll("priority-", "");
+                    testCasePO.setPriority("P"+priority);
+                    PurpleAttached operate = subAttached.getChildren().getAttached().get(0);
+                    // 用例步骤
+                    String operateTitle = operate.getTitle();
+                    testCasePO.setActions(Collections.singletonList(operateTitle));
+                    // 预期结果
+                    String resultTitle = operate.getChildren().getAttached().get(0).getTitle();
+                    testCasePO.setResults(Collections.singletonList(resultTitle));
                 }
             }
         }
-
-        // 递归遍历当前节点所有的子节点
-        List<Element> listElement = node.elements();
-        // 遍历所有一级子节点
-        for (Element e : listElement) {
-            // 递归
-            parseXMind(e);
-        }
-
     }
-
-    /***
-     * &Desc: 解析XMind: 根节点的信息
-     * @param node 指定节点开始解析
-     * @return void
-     */
-    private static void dealXMindRootInfo(Element node){
-        // 获取root topic信息
-        if("sheet".equals(node.getName())){
-            logger.info("###########解析 root topic 信息###########");
-            Element firstElement = node.element("topic");
-            Element firstTopicNotes = firstElement.element("notes");
-            if(firstTopicNotes !=  null){
-                Element html = firstTopicNotes.element("html");
-                List<Element> topicNotesProperty = html.elements();
-                logger.info("###########开始获取root topic备注信息###########");
-                for (Element e: topicNotesProperty) {
-                    logger.info("=====================>" + e.getStringValue());
-                }
-                logger.info("###########开始获取root topic备注信息###########");
-            }
-        }
-
-    }
-
-    /***
-     * &Desc: 解析XMind: 用例节点的相关信息，并组装成一条测试用例，放入 测试用例对象 中
-     * @param testCaseTopicNode 测试用例节点
-     * @param markerIcon 测试用例节点的Marker标识值
-     * @return cn.xxx.xmind2excel.biz.TestCasePO
-     */
-    private static TestCasePO dealXMindTestCase(Element testCaseTopicNode, String markerIcon){
-        TestCasePO testCasePO = new TestCasePO();
-
-        /** 取得：用例目录 */
-        StringBuilder testCaseCatalog = new StringBuilder();
-        Element prevTopicNode = testCaseTopicNode.getParent().getParent().getParent();
-        // 回溯路径找到Test Case目录
-        while(!prevTopicNode.getParent().getName().equals("sheet")){
-            String catalogItem = prevTopicNode.element("title").getStringValue();
-            if(testCaseCatalog.toString().equals("")){
-                testCaseCatalog.append(catalogItem);
-            }else {
-                testCaseCatalog.insert(0, "-")
-                        .insert(0,catalogItem);
-            }
-            prevTopicNode = prevTopicNode.getParent().getParent().getParent();
-        }
-
-        /** 取得：用例名称 */
-        String testCaseName = testCaseTopicNode.element("title").getStringValue();
-
-        /** 取得：前置条件 */
-        String predication = "";
-        Element notes = testCaseTopicNode.element("notes");
-        if(notes != null){
-            predication = notes.element("plain").getStringValue();
-        }
-
-        /** 取得：优先级数字 */
-        String suffix = markerIcon.replaceAll("priority-", "");
-        String priority = "";
-        // 判断用例优先级
-        switch (suffix) {
-            case "1":
-                priority = "高";
-                break;
-            case "2":
-                priority = "中";
-                break;
-            case "3":
-                priority = "低";
-                break;
-            default:
-                break;
-        }
-
-        /** 取得：步骤、期望 */
-        List<String> steps = new ArrayList<>();
-        List<String> results = new ArrayList<>();
-        Element stepChildrenNode = testCaseTopicNode.element("children");
-        // 获取用例的所有步骤
-        try {
-            if(stepChildrenNode != null){
-                List<Element> stepTopicNodes = stepChildrenNode.element("topics").elements("topic");
-                for (Element e: stepTopicNodes) {
-                    // XMind copy节点无title节点问题，容错处理
-                    Element step = e.element("title");
-                    if(step != null){
-                        steps.add(step.getStringValue());
-                    }else {
-                        steps.add("");
-                    }
-                    Element resultChildrenNode = e.element("children");
-                    // 获取单个步骤的所有期望
-                    if(resultChildrenNode != null){
-                        List<Element> resultTopicNodes = resultChildrenNode.element("topics").elements("topic");
-                        for (Element ee: resultTopicNodes) {
-                            // XMind copy节点无title节点问题，容错处理
-                            Element expect = ee.element("title");
-                            if(expect != null){
-                                results.add(expect.getStringValue());
-                            }else {
-                                results.add("");
-                            }
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            logger.error("******解析测试用例步骤和期望出错：" + testCaseName);
-            e.printStackTrace();
-        }
-
-        /** 赋值用例对象 */
-        testCasePO.setTestCaseCatalog(testCaseCatalog.toString());
-        testCasePO.setTestCaseName(testCaseName);
-        testCasePO.setPredication(predication);
-        testCasePO.setActions(steps);
-        testCasePO.setResults(results);
-        testCasePO.setPriority(priority);
-        testCasePO.setTestCaseType("功能测试");
-
-        logger.info("=====================>解析测试用例： " + testCaseName);
-        return testCasePO;
-    }
-
-
 }

@@ -13,6 +13,8 @@ import java.util.List;
 public class TestCasePO {
     /** 用例目录 */
     private String testCaseCatalog;
+    private String demandId;
+    private String createdBy;
 
     /** 用例名称 */
     private String testCaseName;
@@ -28,6 +30,11 @@ public class TestCasePO {
 
     /** 用例类型 */
     private String testCaseType;
+
+    /**
+     * 用例状态
+     */
+    private String testCaseStatus;
 
     /** 用例等级 */
     private String priority;
